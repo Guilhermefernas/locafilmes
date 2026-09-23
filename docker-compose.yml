@@ -1,0 +1,16 @@
+version: "3.8"
+services:
+  locafilmes-db:
+    image: postgres:16
+    container_name: locafilmes-db
+    environment:
+      POSTGRES_DB: locafilmes
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - locafilmes-data:/var/lib/postgresql/data
+
+volumes:
+  locafilmes-data:
