@@ -25,6 +25,12 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
 
+security:
+  jwt:
+    # Em produção defina a variável de ambiente JWT_SECRET (mínimo 32 caracteres).
+    secret: ${JWT_SECRET:locafilmes-chave-secreta-de-desenvolvimento-troque-em-producao-2026}
+    expiration-ms: ${JWT_EXPIRATION_MS:3600000}   # 1 hora
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
@@ -34,4 +40,5 @@ springdoc:
 logging:
   level:
     com.locafilmes: INFO
+    org.springframework.security: WARN
     org.hibernate.SQL: DEBUG

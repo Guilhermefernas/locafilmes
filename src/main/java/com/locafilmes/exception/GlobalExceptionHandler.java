@@ -4,6 +4,9 @@ import com.locafilmes.dto.common.ApiErrorDTO;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -34,6 +37,25 @@ public class GlobalExceptionHandler {
                 .map(erro -> erro.getField() + ": " + erro.getDefaultMessage())
                 .toList();
         return construirResposta(HttpStatus.BAD_REQUEST, "Erro de validação", "Um ou mais campos estão inválidos", request, detalhes);
+    }
+
+    // ---- Segurança (JWT / Spring Security) ----
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<ApiErrorDTO> handleCredenciaisInvalidas(BadCredentialsException ex, HttpServletRequest request) {
+        return construirResposta(HttpStatus.UNAUTHORIZED, "Não autenticado", "E-mail ou senha inválidos", request, null);
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiErrorDTO> handleNaoAutenticado(AuthenticationException ex, HttpServletRequest request) {
+        return construirResposta(HttpStatus.UNAUTHORIZED, "Não autenticado", "Autenticação necessária", request, null);
+    }
+
+    // Lançada por @PreAuthorize e pelas verificações de posse (cliente acessando dados de outro).
+    // Sem este handler, o handler genérico abaixo transformaria o 403 em 500.
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiErrorDTO> handleAcessoNegado(AccessDeniedException ex, HttpServletRequest request) {
+        return construirResposta(HttpStatus.FORBIDDEN, "Acesso negado", "Você não tem permissão para acessar este recurso", request, null);
     }
 
     @ExceptionHandler(Exception.class)

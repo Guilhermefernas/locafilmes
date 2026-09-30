@@ -6,6 +6,7 @@ import com.locafilmes.service.DiretorService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +21,7 @@ public class DiretorController {
 
     private final DiretorService diretorService;
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
     public ResponseEntity<DiretorResponseDTO> criar(@Valid @RequestBody DiretorRequestDTO dto) {
         return ResponseEntity.status(HttpStatus.CREATED).body(diretorService.criar(dto));
@@ -35,11 +37,13 @@ public class DiretorController {
         return ResponseEntity.ok(diretorService.listarTodos());
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<DiretorResponseDTO> atualizar(@PathVariable Long id, @Valid @RequestBody DiretorRequestDTO dto) {
         return ResponseEntity.ok(diretorService.atualizar(id, dto));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> excluir(@PathVariable Long id) {
         diretorService.excluir(id);

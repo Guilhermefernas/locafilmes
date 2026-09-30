@@ -6,16 +6,18 @@ import com.locafilmes.service.UsuarioService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-// Observação: RF02 diz que o CRUD de usuários é restrito ao administrador.
-// A restrição por Role (@PreAuthorize) será aplicada na etapa de JWT + Spring Security.
+// RF02: o CRUD de usuários é restrito ao administrador (@PreAuthorize no nível da classe).
+// O auto-cadastro de clientes é feito em POST /api/auth/register.
 @RestController
 @RequestMapping("/api/usuarios")
+@PreAuthorize("hasRole('ADMIN')")
 @RequiredArgsConstructor
 @Tag(name = "Usuários")
 public class UsuarioController {
