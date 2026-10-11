@@ -34,6 +34,9 @@ security:
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
+    persist-authorization: true
+    tags-sorter: alpha
+    operations-sorter: alpha
   api-docs:
     path: /v3/api-docs
 

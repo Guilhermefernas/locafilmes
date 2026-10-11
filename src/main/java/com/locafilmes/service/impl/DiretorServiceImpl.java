@@ -4,19 +4,23 @@ import com.locafilmes.dto.diretor.DiretorRequestDTO;
 import com.locafilmes.dto.diretor.DiretorResponseDTO;
 import com.locafilmes.entity.Diretor;
 import com.locafilmes.exception.ResourceNotFoundException;
+import com.locafilmes.mapper.DiretorMapper;
 import com.locafilmes.repository.DiretorRepository;
 import com.locafilmes.service.DiretorService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DiretorServiceImpl implements DiretorService {
 
     private final DiretorRepository diretorRepository;
+    private final DiretorMapper diretorMapper;
 
     @Override
     @Transactional
@@ -26,20 +30,22 @@ public class DiretorServiceImpl implements DiretorService {
                 .nacionalidade(dto.nacionalidade())
                 .build();
 
-        return toResponseDTO(diretorRepository.save(diretor));
+        Diretor salvo = diretorRepository.save(diretor);
+        log.info("Diretor criado: id={}", salvo.getId());
+        return diretorMapper.toResponse(salvo);
     }
 
     @Override
     @Transactional(readOnly = true)
     public DiretorResponseDTO buscarPorId(Long id) {
-        return toResponseDTO(buscarEntidade(id));
+        return diretorMapper.toResponse(buscarEntidade(id));
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<DiretorResponseDTO> listarTodos() {
         return diretorRepository.findAll().stream()
-                .map(this::toResponseDTO)
+                .map(diretorMapper::toResponse)
                 .toList();
     }
 
@@ -49,7 +55,9 @@ public class DiretorServiceImpl implements DiretorService {
         Diretor diretor = buscarEntidade(id);
         diretor.setNome(dto.nome());
         diretor.setNacionalidade(dto.nacionalidade());
-        return toResponseDTO(diretorRepository.save(diretor));
+        Diretor salvo = diretorRepository.save(diretor);
+        log.info("Diretor atualizado: id={}", salvo.getId());
+        return diretorMapper.toResponse(salvo);
     }
 
     @Override
@@ -57,14 +65,11 @@ public class DiretorServiceImpl implements DiretorService {
     public void excluir(Long id) {
         Diretor diretor = buscarEntidade(id);
         diretorRepository.delete(diretor);
+        log.info("Diretor excluido: id={}", id);
     }
 
     private Diretor buscarEntidade(Long id) {
         return diretorRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Diretor", id));
-    }
-
-    private DiretorResponseDTO toResponseDTO(Diretor diretor) {
-        return new DiretorResponseDTO(diretor.getId(), diretor.getNome(), diretor.getNacionalidade());
     }
 }

@@ -1,26 +1,26 @@
 package com.locafilmes.service.impl;
 
-import com.locafilmes.dto.categoria.CategoriaResponseDTO;
-import com.locafilmes.dto.diretor.DiretorResponseDTO;
 import com.locafilmes.dto.filme.FilmeRequestDTO;
 import com.locafilmes.dto.filme.FilmeResponseDTO;
 import com.locafilmes.entity.Categoria;
 import com.locafilmes.entity.Diretor;
 import com.locafilmes.entity.Filme;
 import com.locafilmes.exception.ResourceNotFoundException;
+import com.locafilmes.mapper.FilmeMapper;
 import com.locafilmes.repository.CategoriaRepository;
 import com.locafilmes.repository.DiretorRepository;
 import com.locafilmes.repository.FilmeRepository;
 import com.locafilmes.service.FilmeService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class FilmeServiceImpl implements FilmeService {
@@ -28,6 +28,7 @@ public class FilmeServiceImpl implements FilmeService {
     private final FilmeRepository filmeRepository;
     private final DiretorRepository diretorRepository;
     private final CategoriaRepository categoriaRepository;
+    private final FilmeMapper filmeMapper;
 
     @Override
     @Transactional
@@ -45,28 +46,33 @@ public class FilmeServiceImpl implements FilmeService {
                 .categorias(categorias)
                 .build();
 
-        return toResponseDTO(filmeRepository.save(filme));
+        Filme salvo = filmeRepository.save(filme);
+        log.info("Filme criado: id={}", salvo.getId());
+        return filmeMapper.toResponse(salvo);
     }
 
     @Override
     @Transactional(readOnly = true)
     public FilmeResponseDTO buscarPorId(Long id) {
-        return toResponseDTO(buscarEntidade(id));
+        return filmeMapper.toResponse(buscarEntidade(id));
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<FilmeResponseDTO> listarTodos() {
         return filmeRepository.findAll().stream()
-                .map(this::toResponseDTO)
+                .map(filmeMapper::toResponse)
                 .toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<FilmeResponseDTO> listarPorCategoria(Long categoriaId) {
+        if (!categoriaRepository.existsById(categoriaId)) {
+            throw ResourceNotFoundException.of("Categoria", categoriaId);
+        }
         return filmeRepository.findByCategorias_IdOrderByTituloAsc(categoriaId).stream()
-                .map(this::toResponseDTO)
+                .map(filmeMapper::toResponse)
                 .toList();
     }
 
@@ -85,7 +91,9 @@ public class FilmeServiceImpl implements FilmeService {
         filme.setDiretor(diretor);
         filme.setCategorias(categorias);
 
-        return toResponseDTO(filmeRepository.save(filme));
+        Filme salvo = filmeRepository.save(filme);
+        log.info("Filme atualizado: id={}", salvo.getId());
+        return filmeMapper.toResponse(salvo);
     }
 
     @Override
@@ -93,6 +101,7 @@ public class FilmeServiceImpl implements FilmeService {
     public void excluir(Long id) {
         Filme filme = buscarEntidade(id);
         filmeRepository.delete(filme);
+        log.info("Filme excluido: id={}", id);
     }
 
     private Filme buscarEntidade(Long id) {
@@ -111,28 +120,5 @@ public class FilmeServiceImpl implements FilmeService {
             throw new ResourceNotFoundException("Uma ou mais categorias informadas não foram encontradas");
         }
         return categorias;
-    }
-
-    private FilmeResponseDTO toResponseDTO(Filme filme) {
-        DiretorResponseDTO diretorDTO = filme.getDiretor() == null ? null : new DiretorResponseDTO(
-                filme.getDiretor().getId(),
-                filme.getDiretor().getNome(),
-                filme.getDiretor().getNacionalidade()
-        );
-
-        Set<CategoriaResponseDTO> categoriasDTO = filme.getCategorias().stream()
-                .map(c -> new CategoriaResponseDTO(c.getId(), c.getNome()))
-                .collect(Collectors.toSet());
-
-        return new FilmeResponseDTO(
-                filme.getId(),
-                filme.getTitulo(),
-                filme.getAnoLancamento(),
-                filme.getDuracaoMinutos(),
-                filme.getValorDiaria(),
-                filme.getQuantidadeDisponivel(),
-                diretorDTO,
-                categoriasDTO
-        );
     }
 }

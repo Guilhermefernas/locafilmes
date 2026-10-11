@@ -1,22 +1,22 @@
 package com.locafilmes.service.impl;
 
-import com.locafilmes.dto.categoria.CategoriaResponseDTO;
-import com.locafilmes.dto.diretor.DiretorResponseDTO;
-import com.locafilmes.dto.filme.FilmeResponseDTO;
 import com.locafilmes.dto.locacao.LocacaoRequestDTO;
 import com.locafilmes.dto.locacao.LocacaoResponseDTO;
-import com.locafilmes.dto.usuario.UsuarioResponseDTO;
 import com.locafilmes.entity.Filme;
 import com.locafilmes.entity.Locacao;
 import com.locafilmes.entity.StatusLocacao;
 import com.locafilmes.entity.Usuario;
 import com.locafilmes.exception.BusinessException;
 import com.locafilmes.exception.ResourceNotFoundException;
+import com.locafilmes.mapper.LocacaoMapper;
 import com.locafilmes.repository.FilmeRepository;
 import com.locafilmes.repository.LocacaoRepository;
 import com.locafilmes.repository.UsuarioRepository;
+import com.locafilmes.security.UsuarioAutenticado;
 import com.locafilmes.service.LocacaoService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,8 +26,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class LocacaoServiceImpl implements LocacaoService {
@@ -35,10 +35,13 @@ public class LocacaoServiceImpl implements LocacaoService {
     private final LocacaoRepository locacaoRepository;
     private final UsuarioRepository usuarioRepository;
     private final FilmeRepository filmeRepository;
+    private final LocacaoMapper locacaoMapper;
 
     @Override
     @Transactional
-    public LocacaoResponseDTO criar(LocacaoRequestDTO dto) {
+    public LocacaoResponseDTO criar(LocacaoRequestDTO dto, UsuarioAutenticado logado) {
+        garantirAcesso(logado, dto.usuarioId());
+
         Usuario usuario = usuarioRepository.findById(dto.usuarioId())
                 .orElseThrow(() -> ResourceNotFoundException.of("Usuário", dto.usuarioId()));
 
@@ -49,7 +52,6 @@ public class LocacaoServiceImpl implements LocacaoService {
 
         LocalDate hoje = LocalDate.now();
 
-        // Regra de negócio: só é possível alugar um filme com quantidade disponível > 0.
         for (Filme filme : filmes) {
             if (!filme.possuiDisponibilidade()) {
                 throw new BusinessException("O filme '" + filme.getTitulo() + "' não possui unidades disponíveis para locação");
@@ -61,13 +63,11 @@ public class LocacaoServiceImpl implements LocacaoService {
             throw new BusinessException("A data prevista de devolução deve ser posterior à data de locação");
         }
 
-        // Regra de negócio: valor total = soma das diárias dos filmes * dias alugados.
         BigDecimal somaDiarias = filmes.stream()
                 .map(Filme::getValorDiaria)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal valorTotal = somaDiarias.multiply(BigDecimal.valueOf(dias));
 
-        // Regra de negócio: ao alugar, a quantidade disponível do filme diminui.
         filmes.forEach(Filme::decrementarDisponibilidade);
         filmeRepository.saveAll(filmes);
 
@@ -80,48 +80,60 @@ public class LocacaoServiceImpl implements LocacaoService {
                 .filmes(filmes)
                 .build();
 
-        return toResponseDTO(locacaoRepository.save(locacao));
+        Locacao salva = locacaoRepository.save(locacao);
+        log.info("Locacao criada: id={} usuarioId={}", salva.getId(), usuario.getId());
+        return locacaoMapper.toResponse(salva);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public LocacaoResponseDTO buscarPorId(Long id) {
-        return toResponseDTO(buscarEntidade(id));
+    public LocacaoResponseDTO buscarPorId(Long id, UsuarioAutenticado logado) {
+        Locacao locacao = buscarEntidade(id);
+        garantirAcesso(logado, locacao.getUsuario().getId());
+        return locacaoMapper.toResponse(locacao);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<LocacaoResponseDTO> listarTodas() {
+    public List<LocacaoResponseDTO> listar(Long usuarioId, UsuarioAutenticado logado) {
+        if (logado == null) {
+            throw new AccessDeniedException("Acesso negado à locação de outro usuário");
+        }
+        if (!logado.isAdmin()) {
+            garantirAcesso(logado, usuarioId == null ? logado.getId() : usuarioId);
+            return locacaoRepository.findByUsuario_IdOrderByDataLocacaoDesc(logado.getId()).stream()
+                    .map(locacaoMapper::toResponse)
+                    .toList();
+        }
+        if (usuarioId != null) {
+            return locacaoRepository.findByUsuario_IdOrderByDataLocacaoDesc(usuarioId).stream()
+                    .map(locacaoMapper::toResponse)
+                    .toList();
+        }
         return locacaoRepository.findAll().stream()
-                .map(this::toResponseDTO)
-                .toList();
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<LocacaoResponseDTO> listarPorUsuario(Long usuarioId) {
-        return locacaoRepository.findByUsuario_IdOrderByDataLocacaoDesc(usuarioId).stream()
-                .map(this::toResponseDTO)
+                .map(locacaoMapper::toResponse)
                 .toList();
     }
 
     @Override
     @Transactional
-    public LocacaoResponseDTO registrarDevolucao(Long id) {
+    public LocacaoResponseDTO registrarDevolucao(Long id, UsuarioAutenticado logado) {
         Locacao locacao = buscarEntidade(id);
+        garantirAcesso(logado, locacao.getUsuario().getId());
 
         if (locacao.getStatus() == StatusLocacao.FINALIZADA) {
             throw new BusinessException("Esta locação já foi finalizada");
         }
 
-        // Regra de negócio: ao devolver, a quantidade disponível do filme aumenta.
         locacao.getFilmes().forEach(Filme::incrementarDisponibilidade);
         filmeRepository.saveAll(locacao.getFilmes());
 
         locacao.setDataDevolucao(LocalDate.now());
         locacao.setStatus(StatusLocacao.FINALIZADA);
 
-        return toResponseDTO(locacaoRepository.save(locacao));
+        Locacao salva = locacaoRepository.save(locacao);
+        log.info("Locacao devolvida: id={}", salva.getId());
+        return locacaoMapper.toResponse(salva);
     }
 
     private Locacao buscarEntidade(Long id) {
@@ -129,46 +141,9 @@ public class LocacaoServiceImpl implements LocacaoService {
                 .orElseThrow(() -> ResourceNotFoundException.of("Locação", id));
     }
 
-    private LocacaoResponseDTO toResponseDTO(Locacao locacao) {
-        Usuario usuario = locacao.getUsuario();
-        UsuarioResponseDTO usuarioDTO = new UsuarioResponseDTO(
-                usuario.getId(), usuario.getNome(), usuario.getEmail(), usuario.getRole()
-        );
-
-        Set<FilmeResponseDTO> filmesDTO = locacao.getFilmes().stream()
-                .map(this::toFilmeResponseDTO)
-                .collect(Collectors.toSet());
-
-        return new LocacaoResponseDTO(
-                locacao.getId(),
-                usuarioDTO,
-                locacao.getDataLocacao(),
-                locacao.getDataDevolucaoPrevista(),
-                locacao.getDataDevolucao(),
-                locacao.getValorTotal(),
-                locacao.getStatus(),
-                filmesDTO
-        );
-    }
-
-    private FilmeResponseDTO toFilmeResponseDTO(Filme filme) {
-        DiretorResponseDTO diretorDTO = filme.getDiretor() == null ? null : new DiretorResponseDTO(
-                filme.getDiretor().getId(), filme.getDiretor().getNome(), filme.getDiretor().getNacionalidade()
-        );
-
-        Set<CategoriaResponseDTO> categoriasDTO = filme.getCategorias().stream()
-                .map(c -> new CategoriaResponseDTO(c.getId(), c.getNome()))
-                .collect(Collectors.toSet());
-
-        return new FilmeResponseDTO(
-                filme.getId(),
-                filme.getTitulo(),
-                filme.getAnoLancamento(),
-                filme.getDuracaoMinutos(),
-                filme.getValorDiaria(),
-                filme.getQuantidadeDisponivel(),
-                diretorDTO,
-                categoriasDTO
-        );
+    private void garantirAcesso(UsuarioAutenticado logado, Long donoId) {
+        if (logado == null || (!logado.isAdmin() && !logado.getId().equals(donoId))) {
+            throw new AccessDeniedException("Acesso negado à locação de outro usuário");
+        }
     }
 }

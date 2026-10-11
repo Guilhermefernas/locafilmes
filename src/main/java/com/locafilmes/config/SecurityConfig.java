@@ -33,7 +33,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private static final String[] ROTAS_PUBLICAS_SWAGGER = {
-            "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**"
+            "/swagger-ui.html",
+            "/swagger-ui/**",
+            "/v3/api-docs",
+            "/v3/api-docs/**"
     };
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;

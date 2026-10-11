@@ -5,26 +5,29 @@ import com.locafilmes.dto.usuario.UsuarioResponseDTO;
 import com.locafilmes.entity.Usuario;
 import com.locafilmes.exception.BusinessException;
 import com.locafilmes.exception.ResourceNotFoundException;
+import com.locafilmes.mapper.UsuarioMapper;
 import com.locafilmes.repository.UsuarioRepository;
 import com.locafilmes.service.UsuarioService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UsuarioServiceImpl implements UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UsuarioMapper usuarioMapper;
 
     @Override
     @Transactional
     public UsuarioResponseDTO criar(UsuarioRequestDTO dto) {
-        // Regra de negócio: o e-mail do usuário não pode se repetir.
         if (usuarioRepository.existsByEmailIgnoreCase(dto.email())) {
             throw new BusinessException("Já existe um usuário cadastrado com o e-mail '" + dto.email() + "'");
         }
@@ -36,20 +39,22 @@ public class UsuarioServiceImpl implements UsuarioService {
                 .role(dto.role())
                 .build();
 
-        return toResponseDTO(usuarioRepository.save(usuario));
+        Usuario salvo = usuarioRepository.save(usuario);
+        log.info("Usuario criado: id={} role={}", salvo.getId(), salvo.getRole());
+        return usuarioMapper.toResponse(salvo);
     }
 
     @Override
     @Transactional(readOnly = true)
     public UsuarioResponseDTO buscarPorId(Long id) {
-        return toResponseDTO(buscarEntidade(id));
+        return usuarioMapper.toResponse(buscarEntidade(id));
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<UsuarioResponseDTO> listarTodos() {
         return usuarioRepository.findAll().stream()
-                .map(this::toResponseDTO)
+                .map(usuarioMapper::toResponse)
                 .toList();
     }
 
@@ -69,7 +74,9 @@ public class UsuarioServiceImpl implements UsuarioService {
         usuario.setSenha(passwordEncoder.encode(dto.senha()));
         usuario.setRole(dto.role());
 
-        return toResponseDTO(usuarioRepository.save(usuario));
+        Usuario salvo = usuarioRepository.save(usuario);
+        log.info("Usuario atualizado: id={} role={}", salvo.getId(), salvo.getRole());
+        return usuarioMapper.toResponse(salvo);
     }
 
     @Override
@@ -77,14 +84,11 @@ public class UsuarioServiceImpl implements UsuarioService {
     public void excluir(Long id) {
         Usuario usuario = buscarEntidade(id);
         usuarioRepository.delete(usuario);
+        log.info("Usuario excluido: id={}", id);
     }
 
     private Usuario buscarEntidade(Long id) {
         return usuarioRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Usuário", id));
-    }
-
-    private UsuarioResponseDTO toResponseDTO(Usuario usuario) {
-        return new UsuarioResponseDTO(usuario.getId(), usuario.getNome(), usuario.getEmail(), usuario.getRole());
     }
 }

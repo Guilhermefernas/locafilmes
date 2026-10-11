@@ -2,8 +2,11 @@ package com.locafilmes.exception;
 
 import com.locafilmes.dto.common.ApiErrorDTO;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
@@ -18,6 +21,7 @@ import java.util.List;
  * Tratamento centralizado de exceções da API (RNF06 / requisito 5 do trabalho).
  * Garante que o cliente da API sempre receba um JSON de erro padronizado.
  */
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -29,6 +33,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiErrorDTO> handleBusiness(BusinessException ex, HttpServletRequest request) {
         return construirResposta(HttpStatus.UNPROCESSABLE_ENTITY, "Regra de negócio violada", ex.getMessage(), request, null);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiErrorDTO> handleJsonInvalido(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        return construirResposta(HttpStatus.BAD_REQUEST, "Erro de validação", "O corpo da requisição está inválido ou incompleto", request, null);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiErrorDTO> handleIntegridade(DataIntegrityViolationException ex, HttpServletRequest request) {
+        return construirResposta(HttpStatus.CONFLICT, "Conflito de dados",
+                "Não foi possível concluir a operação porque o registro está vinculado a outros dados", request, null);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -60,6 +75,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorDTO> handleGenerico(Exception ex, HttpServletRequest request) {
+        log.error("Erro inesperado em {}", request.getRequestURI(), ex);
         return construirResposta(HttpStatus.INTERNAL_SERVER_ERROR, "Erro interno", "Ocorreu um erro inesperado. Tente novamente mais tarde.", request, null);
     }
 
